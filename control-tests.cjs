@@ -23,6 +23,7 @@ class Element {
   replaceWith(node){const i=this.parent.children.indexOf(this);node.parent=this.parent;this.parent.children[i]=node;}
   setAttribute(key,value){this.attributes[key]=value;}
   removeAttribute(key){delete this.attributes[key];}
+  scrollIntoView(options){this.scrollCalls=(this.scrollCalls||0)+1;this.scrollOptions=options;}
 }
 function harness() {
   const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8'), elements=new Map();
@@ -37,11 +38,11 @@ function harness() {
     document:{getElementById:$,createElement:()=>new Element(),createTextNode:text=>{const e=new Element();e.textContent=text;return e;},querySelector:s=>{assert(selectors.has(s));return selectors.get(s);}},
     setTimeout:fn=>{const id=++next;tasks.set(id,fn);return id;},clearTimeout:id=>tasks.delete(id)
   });
-  for(const file of ['engine.js','tests.js','app.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),context,{filename:file});
+  for(const file of ['engine.js','app.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),context,{filename:file});
   const click=id=>{if(!$(id).disabled)$(id).onclick();};
   const apply=(A,B)=>{$('inputA').value=A;$('inputB').value=B;click('apply');};
   const snapshot=()=>JSON.stringify(['eA','eB','eC','vC','eI','vI','trace'].map(id=>$(id).textContent));
-  return {$,click,apply,snapshot,tasks,tick(){const entry=tasks.entries().next().value;if(entry){tasks.delete(entry[0]);entry[1]();}}};
+  return {$,click,apply,snapshot,tasks,traceWrap:selectors.get('.tracewrap'),tick(){const entry=tasks.entries().next().value;if(entry){tasks.delete(entry[0]);entry[1]();}}};
 }
 const tests=[];
 function test(name,fn){try{fn(harness());tests.push({name,ok:true});}catch(e){tests.push({name,ok:false,error:e.message});}}
@@ -57,7 +58,8 @@ test('Generar datos detiene ejecución y limpia conteos',({$,click,tasks})=>{cli
 test('Cambiar longitud o tipo cancela reproducción',({$,click,tasks})=>{click('play');$('n').value='17';$('n').oninput();assert.equal(tasks.size,0);assert.equal($('eA').children.length,17);click('play');$('tipo').value='uint8';$('tipo').onchange();assert.equal(tasks.size,0);assert.equal($('q0').children.length,16);});
 test('Todos los ejemplos se cargan para cada tipo',({$,click})=>{for(const type of ['float32','int16','uint8']){ $('tipo').value=type;$('tipo').onchange();for(const example of ['full','tail','limits']){$('example').value=example;click('loadExample');assert.equal($('errorA').textContent,'');assert.equal($('errorB').textContent,'');assert.equal($('eI').textContent,'0');}}});
 test('N=17 termina con 17 sumas escalares y 5 en ruta NEON',({$,apply,click,tick,tasks})=>{apply(Array(17).fill(2).join(','),Array(17).fill(3).join(','));click('play');for(let i=0;i<20;i++)tick();assert.equal(tasks.size,0);assert.equal($('eI').textContent,'17');assert.equal($('vI').textContent,'5');assert.equal($('trace').children.length,17);assert.match($('result').textContent,/4 vectoriales \+ 1 escalares/);assert($('step').disabled);assert($('play').disabled);});
-test('Ejecutar pruebas muestra resultados y conserva el experimento',({$,click,snapshot})=>{click('step');const before=snapshot();click('runTests');assert.equal(snapshot(),before);assert.match($('testSummary').textContent,/50\/50/);assert.equal($('testResults').children.length,50);});
+test('Reproducir y Un paso llevan a la traza; pausar no desplaza',({click,traceWrap})=>{click('play');assert.equal(traceWrap.scrollCalls,1);click('play');assert.equal(traceWrap.scrollCalls,1);click('step');assert.equal(traceWrap.scrollCalls,2);assert.equal(traceWrap.scrollOptions.block,'center');});
+test('Float32 conserva el signo de cero al aplicar y reiniciar',({$,apply,click})=>{apply('-0','-0');assert.equal($('inputA').value,'-0');click('step');assert.equal($('eRc').textContent,'-0');assert.match($('trace').textContent,/\[-0\]/);click('reset');assert.equal($('inputA').value,'-0');});
 for(const t of tests)console.log(`${t.ok?'OK':'FALLO'} ${t.name}${t.error?': '+t.error:''}`);
 console.log(`${tests.filter(t=>t.ok).length}/${tests.length} pruebas de controles aprobadas (DOM mínimo, sin navegador)`);
 process.exitCode=tests.some(t=>!t.ok)?1:0;

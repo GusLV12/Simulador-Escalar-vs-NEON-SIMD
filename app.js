@@ -3,7 +3,7 @@
   'use strict';
   const E = SimdEngine, $ = id => document.getElementById(id);
   let state, timer = null;
-  const fmt = value => value === null ? '·' : String(value);
+  const fmt = value => value === null ? '·' : Object.is(value,-0) ? '-0' : String(value);
   function stop() {
     if (timer !== null) clearTimeout(timer);
     timer = null; $('play').textContent = 'Reproducir';
@@ -115,7 +115,7 @@
     const same=state.Cs.every((value,i)=>Object.is(value,state.Cv[i]));
     const total=state.vectorCount+state.tailCount;
     const lines=[
-      `Comprobación de coincidencia: ${same?'los '+state.N+' resultados coinciden':'hay diferencias'}. Esta comparación no sustituye las pruebas con respuestas conocidas.`,
+      `Comprobación de coincidencia: ${same?'los '+state.N+' resultados coinciden':'hay diferencias'}.`,
       `Instrucciones de suma: escalar ${state.scalarCount}; ruta NEON ${total} (${state.vectorCount} vectoriales + ${state.tailCount} escalares de residuo).`,
       `Relación de instrucciones de suma: ${(state.scalarCount/total).toFixed(2)}×. No es una medida de tiempo ni de aceleración real.`
     ];
@@ -126,11 +126,12 @@
     if(timer!==null){stop();return;}
     if(E.done(state))return;
     $('play').textContent='Pausar';
+    document.querySelector('.tracewrap').scrollIntoView?.({behavior:'smooth',block:'center'});
     function loop() {timer=null;advance();if(!E.done(state))timer=setTimeout(loop,Number($('vel').value));}
     loop();
   }
   $('play').onclick=play;
-  $('step').onclick=()=>{stop();advance();};
+  $('step').onclick=()=>{stop();advance();document.querySelector('.tracewrap').scrollIntoView?.({behavior:'smooth',block:'center'});};
   $('reset').onclick=()=>install(E.create(state.type,state.A,state.B),'Ejecución reiniciada: A y B se conservaron.');
   $('generate').onclick=generate;
   $('tipo').onchange=generate;
@@ -144,10 +145,5 @@
     install(E.create(type,A,B),'Datos aplicados. La ejecución comienza desde cero.');
   };
   $('loadExample').onclick=()=>{const type=$('tipo').value,data=E.example(type,$('example').value);install(E.create(type,data.A,data.B),'Ejemplo cargado.');};
-  $('runTests').onclick=()=>{
-    const results=SimdTests.runTests();
-    $('testSummary').textContent=`${results.filter(t=>t.ok).length}/${results.length} pruebas aprobadas. Cada caso de cálculo compara ambas rutas con una respuesta conocida.`;
-    $('testResults').replaceChildren(...results.map(t=>{const li=document.createElement('li');li.textContent=`${t.ok?'✓':'✗'} ${t.name}${t.detail?' — '+t.detail:''}`;li.className=t.ok?'pass':'fail';return li;}));
-  };
   generate();
 })();

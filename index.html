@@ -117,13 +117,13 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
 @media (prefers-reduced-motion: reduce){.cell{transition:none}}
 </style>
 <style>
-.data-panel,.tests-panel{margin-bottom:16px}.data-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}.data-fields label{display:grid;gap:6px;font-weight:600}textarea{width:100%;min-height:90px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono)}textarea:focus-visible{outline:3px solid var(--vec)}.field-error{color:#bc3648;min-height:1.5em;font-weight:500;font-size:.85rem}[aria-invalid=true]{border:2px solid #bc3648}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.help{color:var(--muted);font-size:.88rem}.pass{color:var(--ok)}.fail{color:#bc3648}.test-list{max-height:320px;overflow:auto;padding-left:24px}.cell{min-width:44px;max-width:130px;overflow:hidden;padding-top:6px;font-size:.72rem}.reg{max-width:160px;overflow:auto;padding:4px;font-size:.8rem}.instr{overflow-wrap:anywhere}.stats{grid-template-columns:1fr 1fr 1.3fr}.stat .v{font-size:1.1rem}.result p{margin:6px 0}.tracewrap td{overflow-wrap:anywhere}.lane{font-size:.65rem}.ctl{max-width:100%}.note{line-height:1.6}@media(max-width:650px){.data-fields{grid-template-columns:1fr}.wrap{padding:16px 10px}.stats{gap:4px}.stat{padding:6px}.stat .v{font-size:.95rem}}
+.data-panel{margin-bottom:16px}.data-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}.data-fields label{display:grid;gap:6px;font-weight:600}textarea{width:100%;min-height:90px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono)}textarea:focus-visible{outline:3px solid var(--vec)}.field-error{color:#bc3648;min-height:1.5em;font-weight:500;font-size:.85rem}[aria-invalid=true]{border:2px solid #bc3648}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.help{color:var(--muted);font-size:.88rem}.pass{color:var(--ok)}.fail{color:#bc3648}.test-list{max-height:320px;overflow:auto;padding-left:24px}.cell{min-width:44px;max-width:130px;overflow:hidden;padding-top:6px;font-size:.72rem}.reg{max-width:160px;overflow:auto;padding:4px;font-size:.8rem}.instr{overflow-wrap:anywhere}.stats{grid-template-columns:1fr 1fr 1.3fr}.stat .v{font-size:1.1rem}.result p{margin:6px 0}.tracewrap td{overflow-wrap:anywhere}.lane{font-size:.65rem}.ctl{max-width:100%}.note{line-height:1.6}@media(max-width:650px){.data-fields{grid-template-columns:1fr}.wrap{padding:16px 10px}.stats{gap:4px}.stat{padding:6px}.stat .v{font-size:.95rem}}
 </style></head>
 <body>
 <div class="wrap">
   <header>
     <h1>Escalar vs NEON SIMD · versión verificable</h1>
-    <p class="sub">Modelo didáctico de C = A + B: una ruta escalar y una ruta por grupos NEON. Compara resultados, repite experimentos y ejecuta pruebas con respuestas conocidas.</p>
+    <p class="sub">Modelo didáctico de C = A + B: una ruta escalar y una ruta por grupos NEON. Compara resultados y repite experimentos.</p>
   </header>
 
   <section class="controls" aria-label="Controles de la simulación">
@@ -227,11 +227,7 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
     </div>
   </section>
 
-<section class="card tests-panel" aria-labelledby="testsTitle">
-<h2 id="testsTitle">Pruebas con respuestas conocidas</h2>
-<p class="help">Estas pruebas ejecutan el motor con casos reproducibles y comprueban cada ruta contra valores esperados. No modifican el experimento actual.</p>
-<button id="runTests">Ejecutar pruebas</button><p id="testSummary" role="status">Pruebas aún no ejecutadas.</p><ul id="testResults" class="test-list"></ul>
-</section>  <p class="note">Modelo didáctico basado en el datasheet del Allwinner A20 (Rev. 1.0, 2013): 2× Cortex-A7, ARMv7, NEON Advanced SIMD, VFPv4, 32 KB L1I + 32 KB L1D por núcleo. Solo se cuentan instrucciones de suma. Se omiten cargas, almacenamientos, control del bucle, pipeline y latencias; no se cuentan ciclos reales. JavaScript representa las operaciones: no ejecuta instrucciones ARM/NEON. La relación mostrada no mide aceleración real. En enteros, el resultado se reduce a 8 o 16 bits; el ADD escalar ilustrado no representa las instrucciones adicionales de conversión o almacenamiento. En float32 se redondean entradas y resultados; no se modelan todos los modos especiales de punto flotante del hardware.</p>
+<p class="note">Modelo didáctico basado en el datasheet del Allwinner A20 (Rev. 1.0, 2013): 2× Cortex-A7, ARMv7, NEON Advanced SIMD, VFPv4, 32 KB L1I + 32 KB L1D por núcleo. Solo se cuentan instrucciones de suma. Se omiten cargas, almacenamientos, control del bucle, pipeline y latencias; no se cuentan ciclos reales. JavaScript representa las operaciones: no ejecuta instrucciones ARM/NEON. La relación mostrada no mide aceleración real. En enteros, el resultado se reduce a 8 o 16 bits; el ADD escalar ilustrado no representa las instrucciones adicionales de conversión o almacenamiento. En float32 se redondean entradas y resultados; no se modelan todos los modos especiales de punto flotante del hardware.</p>
 </div>
 
-<script src="engine.js"></script><script src="tests.js"></script><script src="app.js"></script></body></html>
+<script src="engine.js"></script><script src="app.js"></script></body></html>

@@ -20,6 +20,19 @@
       });
     }
     for (const type of ['float32','int16','uint8']) {
+      test(`${type}: todos los tamaños de 1 a 40`, () => {
+        const lanes = {float32:4,int16:8,uint8:16}[type];
+        for (let N=1;N<=40;N++) {
+          const A=Array.from({length:N},(_,i)=>i), B=Array.from({length:N},(_,i)=>40-i);
+          const s=E.run(type,A,B);
+          equal(s.Cs,Array(N).fill(40)); equal(s.Cv,Array(N).fill(40));
+          assert(s.tick===N && s.scalarCount===N, `Avance incorrecto para N=${N}`);
+          assert(s.vectorCount===Math.floor(N/lanes) && s.tailCount===N%lanes, `Conteo incorrecto para N=${N}`);
+          assert(E.done(s) && E.step(s)===null, `Final incorrecto para N=${N}`);
+        }
+      });
+    }
+    for (const type of ['float32','int16','uint8']) {
       const L = {float32:4,int16:8,uint8:16}[type];
       for (const N of [1,L-1,L,L+1,2*L,2*L+1,40]) {
         // Respuesta conocida por construcción: todos los resultados deben ser 5.

@@ -8,7 +8,7 @@ Abre **index.html** con doble clic en Chrome, Edge o Firefox. Conserva todos los
 2. Escribe A y B y pulsa **Aplicar datos**, o selecciona un ejemplo y pulsa **Cargar ejemplo**. Los ejemplos corresponden al tipo seleccionado.
 3. Usa **Un paso** o **Reproducir / Pausar**. Cada paso avanza una suma escalar y una suma en la ruta vectorial, mientras esa ruta tenga trabajo pendiente.
 4. **Reiniciar ejecución** conserva los datos aplicados; **Generar datos** crea números nuevos. Los cambios de texto solo se aplican con el botón Aplicar datos.
-5. **Ejecutar pruebas** muestra cada caso aprobado o fallido sin reemplazar el experimento.
+5. **Un paso** y **Reproducir** desplazan la página a la traza de ejecución.
 
 Introduce entre 1 y 40 números en cada arreglo, con longitudes iguales. Separa los números con comas, espacios o saltos de línea; usa punto decimal. `uint8` admite enteros de 0 a 255; `int16`, de −32768 a 32767. `float32` admite entradas finitas que sigan siendo finitas al convertirlas a esa precisión; valores muy pequeños pueden redondearse a cero. Los errores se muestran junto al campo y no aplican los datos. Si el experimento estaba reproduciéndose, continuará con sus datos anteriores.
 
@@ -23,7 +23,7 @@ Introduce entre 1 y 40 números en cada arreglo, con longitudes iguales. Separa 
 
 ## Pruebas y resultados
 
-El botón **Ejecutar pruebas** ejecuta 50 pruebas del motor. Para ejecutarlas desde la carpeta superior, si tienes Node:
+Las 53 pruebas del motor se ejecutan desde la terminal e incluyen un recorrido de los 120 casos de tipo y longitud permitidos. Desde la carpeta superior, si tienes Node:
 
 ```sh
 node simulador-mejorado/tests.js
@@ -34,7 +34,7 @@ Se comprueban longitudes menores que un grupo, grupos completos y residuos para 
 
 Ejemplos: `float32`, N=16, debe finalizar con 16 sumas escalares y 4 vectoriales. N=17 debe finalizar con 17 sumas escalares y una ruta NEON de 4 vectoriales + 1 escalar de residuo. Para reproducirlos manualmente, introduce 16 o 17 valores `2` en A y la misma cantidad de valores `3` en B: todos los resultados deben ser `5`.
 
-Las pruebas de controles verifican pausa, reinicio, datos manuales, ejemplos, temporizadores y estados finales. No verifican el renderizado de un navegador. La revisión visual automatizada quedó pendiente porque el navegador integrado bloqueó la apertura de archivos locales. Para revisión manual: abre index.html, ejecuta las pruebas, prueba Un paso y Reiniciar, y aplica un arreglo inválido para ver su mensaje de error.
+Las pruebas de controles verifican pausa, reinicio, datos manuales, ejemplos, temporizadores, estados finales, solicitudes de desplazamiento y el signo del cero en float32. No verifican el renderizado de un navegador. Para revisión manual: abre index.html, prueba Reproducir, Un paso y Reiniciar, y aplica un arreglo inválido para ver su mensaje de error.
 
 ## Alcance del modelo
 
