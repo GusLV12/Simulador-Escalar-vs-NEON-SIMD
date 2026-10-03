@@ -67,6 +67,21 @@
     while (!done(s)) step(s);
     return s;
   }
+  // Copias explícitas: JSON perdería -0 e Infinity.
+  function copy(s) {
+    return {...s,A:[...s.A],B:[...s.B],Cs:[...s.Cs],Cv:[...s.Cv]};
+  }
+  function timeline(type,A,B) {
+    const s=create(type,A,B), states=[copy(s)], events=[null];
+    while(!done(s)) {events.push(step(s));states.push(copy(s));}
+    return {states,events};
+  }
+  function counts(type,N) {
+    if(!Object.hasOwn(TYPES,type) || !Number.isInteger(N) || N<1 || N>MAX_N)
+      throw new Error('Tipo o longitud inválidos.');
+    const lanes=128/TYPES[type], groups=Math.floor(N/lanes), tail=N%lanes;
+    return {scalar:N,vector:groups,tail,total:groups+tail,lanes,ratio:N/(groups+tail)};
+  }
   function example(type, kind) {
     const L = 128 / TYPES[type];
     if (kind === 'limits') {
@@ -77,7 +92,7 @@
     const N = kind === 'tail' ? L + 1 : L;
     return {A:Array.from({length:N}, (_, i) => i), B:Array(N).fill(1)};
   }
-  const api = {TYPES, MAX_N, validate, parse, add, create, step, done, run, example};
+  const api = {TYPES, MAX_N, validate, parse, add, create, step, done, run, example, copy, timeline, counts};
   root.SimdEngine = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

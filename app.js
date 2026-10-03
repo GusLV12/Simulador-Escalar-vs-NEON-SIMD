@@ -2,11 +2,14 @@
 (function () {
   'use strict';
   const E = SimdEngine, $ = id => document.getElementById(id);
-  let state, timer = null;
+  let state, sequence, timer = null, playing=false, animating=false, generation=0;
+  const reducedMotion=()=>typeof matchMedia==='function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fmt = value => value === null ? '·' : Object.is(value,-0) ? '-0' : String(value);
   function stop() {
     if (timer !== null) clearTimeout(timer);
-    timer = null; $('play').textContent = 'Reproducir';
+    timer = null; playing=false; animating=false; generation++;
+    $('execution').className='execution';
+    if(state) syncControls();
   }
   function clearErrors() {
     for (const p of ['A','B']) { $('error'+p).textContent=''; $('input'+p).removeAttribute('aria-invalid'); }
@@ -21,10 +24,15 @@
     return el;
   }
   function install(next, message) {
-    stop(); state=next; clearErrors();
+    stop();sequence=E.timeline(next.type,next.A,next.B);state=E.copy(sequence.states[0]);
+    clearErrors();
     $('tipo').value=state.type; $('n').value=state.N; $('nVal').textContent=state.N;
     $('inputA').value=state.A.map(fmt).join(', '); $('inputB').value=state.B.map(fmt).join(', ');
     $('inputStatus').textContent=message;
+    $('timeline').max=state.N;
+    resetVisual();syncControls();SimdComparison.update(state.type,state.N);
+  }
+  function resetVisual() {
     $('info').textContent=`Registro Q = 128 bits = ${state.L} carriles × ${E.TYPES[state.type]} bits · N = ${state.N} → ${state.groups} grupos SIMD + ${state.tail} elementos de residuo. Instrucciones de suma previstas: escalar ${state.N}; ruta NEON ${state.groups+state.tail}.`;
     for (const p of ['e','v']) {
       for (const name of ['A','B','C']) {
@@ -35,16 +43,17 @@
       $(p+'G').replaceChildren();
     }
     for (const name of ['q0','q1','q2']) {
-      const q=$(name); q.style.gridTemplateColumns=`repeat(${state.L},minmax(0,1fr))`;
+      const q=$(name); q.style.gridTemplateColumns=`repeat(${state.L},minmax(32px,1fr))`;
       q.replaceChildren(...Array.from({length:state.L},()=>{const el=document.createElement('div');el.className='lane';el.textContent='–';return el;}));
     }
     for (const id of ['eRa','eRb','eRc']) {$(id).textContent='–'; $(id).classList.remove('on');}
     document.querySelector('.aluchip').textContent=state.type==='float32'?'VFP':'ALU';
     $('eIns').textContent=''; $('vIns').textContent=''; $('vIns').className='instr';
-    $('qbits').textContent=`${state.L} carriles × ${E.TYPES[state.type]} bits = 128 bits`;
+    $('qbits').textContent=`${state.L} carriles × ${E.TYPES[state.type]} bits = 128 bits · desliza el registro si no caben todos`;
     $('vUname').textContent='Unidad vectorial'; $('trace').replaceChildren();
     $('result').className='result'; $('result').replaceChildren();
-    $('step').disabled=false; $('play').disabled=false;
+    $('ePhase').textContent='Listo';$('vPhase').textContent='Listo';
+    $('phaseStatus').textContent='Listo para comenzar.';
   }
   function generate() {
     stop();
@@ -78,7 +87,8 @@
     return `${event.tail?'Residuo escalar: ':''}c[${event.indices.join(', ')}] = [${event.results.map(fmt).join(', ')}]`;
   }
   function advance() {
-    const events=E.step(state);if(!events)return;
+    if(E.done(state))return;
+    const events=sequence.events[state.tick+1];state=E.copy(sequence.states[state.tick+1]);
     mark('e',events.scalar);mark('v',events.vector);
     if(events.scalar) {
       const i=events.scalar.indices[0];
@@ -90,10 +100,10 @@
       for(const [id,source] of [['q0',state.A],['q1',state.B],['q2',state.Cv]]) {
         [...$(id).children].forEach((el,j)=>{
           el.className='lane';el.textContent='–';el.title='';
-          if(j<event.indices.length) {el.classList.add('on');if(event.tail)el.classList.add('tail');el.textContent=fmt(source[event.indices[j]]);el.title=el.textContent;}
+          if(!event.tail&&j<event.indices.length) {el.classList.add('on');el.textContent=fmt(source[event.indices[j]]);el.title=`Carril ${j}: ${el.textContent}`;}
         });
       }
-      $('vUname').textContent=event.tail?'Residuo: suma escalar (no es una instrucción NEON)':`Unidad vectorial: ${state.L} datos por suma`;
+      $('vUname').textContent=event.tail?`Residuo escalar: ${fmt(state.A[event.indices[0]])} + ${fmt(state.B[event.indices[0]])} = ${fmt(event.results[0])} (sin registro Q)`:`Unidad vectorial: ${state.L} datos por suma`;
       $('vIns').textContent=`${mnemonic(!event.tail)} ; ${describe(event)}`;
       $('vIns').className=event.tail?'instr tail':'instr';
     } else {
@@ -111,7 +121,6 @@
     if(E.done(state))finish();
   }
   function finish() {
-    stop();$('step').disabled=true;$('play').disabled=true;
     const same=state.Cs.every((value,i)=>Object.is(value,state.Cv[i]));
     const total=state.vectorCount+state.tailCount;
     const lines=[
@@ -122,17 +131,87 @@
     $('result').replaceChildren(...lines.map(text=>{const p=document.createElement('p');p.textContent=text;return p;}));
     $('result').className='result show';
   }
-  function play() {
-    if(timer!==null){stop();return;}
-    if(E.done(state))return;
-    $('play').textContent='Pausar';
-    document.querySelector('.tracewrap').scrollIntoView?.({behavior:'smooth',block:'center'});
-    function loop() {timer=null;advance();if(!E.done(state))timer=setTimeout(loop,Number($('vel').value));}
-    loop();
+  function syncControls(){
+    for(const id of ['play','localPlay']){$(id).textContent=playing?'Pausar':'Reproducir';$(id).disabled=E.done(state)&&!playing;}
+    for(const id of ['step','next'])$(id).disabled=E.done(state);
+    $('previous').disabled=state.tick===0;
+    $('timeline').value=state.tick;$('position').textContent=`Paso ${state.tick} de ${state.N}`;
+    $('timeline').setAttribute('aria-valuetext',`Paso ${state.tick} de ${state.N}`);
+    $('localSpeed').value=$('vel').value;
   }
-  $('play').onclick=play;
-  $('step').onclick=()=>{stop();advance();document.querySelector('.tracewrap').scrollIntoView?.({behavior:'smooth',block:'center'});};
-  $('reset').onclick=()=>install(E.create(state.type,state.A,state.B),'Ejecución reiniciada: A y B se conservaron.');
+  function seek(position){
+    stop();const target=Math.max(0,Math.min(state.N,Math.trunc(Number(position)||0)));
+    state=E.copy(sequence.states[0]);resetVisual();
+    for(let i=0;i<target;i++)advance();
+    const event=sequence.events[target];
+    $('ePhase').textContent=target?'Paso completado':'Listo';
+    $('vPhase').textContent=event?.vector?(event.vector.tail?'Residuo escalar completado':'Grupo SIMD completado'):target?'Ruta terminada':'Listo';
+    $('phaseStatus').textContent=target===state.N?'Ejecución completada. Puedes retroceder o reiniciar.':`Paso ${target} de ${state.N}.`;
+    syncControls();
+  }
+  function showExecution(){
+    $('execution').scrollIntoView?.({behavior:reducedMotion()?'auto':'smooth',block:'start'});
+  }
+  function phase(name,events,duration){
+    $('execution').className=`execution phase-${name}`;
+    $('execution').style.setProperty('--phase-time',`${duration}ms`);
+    const label={entry:'1/3 · Entrada a registros',sum:'2/3 · Suma',output:'3/3 · Salida hacia C'}[name];
+    $('phaseStatus').textContent=`Paso ${state.tick+(name==='output'?0:1)} de ${state.N}: ${label}`;
+    $('ePhase').textContent=events.scalar?label:'Ruta terminada';
+    $('vPhase').textContent=events.vector?`${label}${events.vector.tail?' · residuo escalar':''}`:'Ruta terminada · en espera';
+    // El residuo usa registros escalares: los carriles Q quedan vacíos.
+    if(name==='entry'){
+      for(const [p,event] of [['e',events.scalar],['v',events.vector]]){
+        for(const name of ['A','B','C'])for(const el of $(p+name).children)el.classList.remove('sel','tail');
+        if(event)for(const i of event.indices)for(const name of ['A','B']){
+          const el=$(p+name).children[i];el.classList.add('sel');if(event.tail)el.classList.add('tail');
+        }
+      }
+      if(events.scalar){const i=events.scalar.indices[0];$('eRa').textContent=fmt(state.A[i]);$('eRb').textContent=fmt(state.B[i]);$('eRc').textContent='…';$('eIns').textContent=`${mnemonic(false)} ; c[${i}]`;}
+      const event=events.vector;
+      for(const [id,source] of [['q0',state.A],['q1',state.B],['q2',null]]){
+        [...$(id).children].forEach((el,j)=>{el.className='lane';el.textContent='–';el.title='';if(event&&!event.tail&&source&&j<event.indices.length){el.classList.add('on');el.textContent=fmt(source[event.indices[j]]);el.title=el.textContent;}});
+      }
+      $('vUname').textContent=!event?'En espera: ruta NEON terminada.':event.tail?`Residuo escalar: ${fmt(state.A[event.indices[0]])} + ${fmt(state.B[event.indices[0]])}`:`Entrada de ${state.L} carriles al registro Q`;
+      $('vIns').textContent=event?`${mnemonic(!event.tail)} ; c[${event.indices.join(', ')}]`:'En espera: ruta NEON terminada.';
+    }
+  }
+  function performStep(){
+    if(E.done(state)){playing=false;syncControls();return;}
+    const token=++generation,events=sequence.events[state.tick+1],duration=Number($('vel').value)/3;
+    animating=true;syncControls();
+    function schedule(fn,delay){timer=setTimeout(()=>{if(token!==generation)return;timer=null;fn();},delay);}
+    function complete(){
+      animating=false;$('execution').className='execution';
+      $('ePhase').textContent='Paso completado';
+      $('vPhase').textContent=events.vector?(events.vector.tail?'Residuo escalar completado':'Grupo SIMD completado'):'Ruta terminada · en espera';
+      $('phaseStatus').textContent=E.done(state)?'Ejecución completada. Puedes retroceder o reiniciar.':`Paso ${state.tick} completado.`;
+      if(E.done(state))playing=false;
+      syncControls();if(playing)performStep();
+    }
+    if(reducedMotion()){
+      advance();$('ePhase').textContent='Paso completado';$('vPhase').textContent=events.vector?.tail?'Residuo escalar completado':events.vector?'Grupo SIMD completado':'Ruta terminada';syncControls();
+      if(playing)schedule(complete,duration*3);else complete();return;
+    }
+    phase('entry',events,duration);
+    schedule(()=>{phase('sum',events,duration);schedule(()=>{advance();phase('output',events,duration);syncControls();schedule(complete,duration);},duration);},duration);
+  }
+  function play(scroll=true){
+    if(playing){seek(state.tick);return;}
+    if(E.done(state))return;
+    if(animating)seek(state.tick);
+    playing=true;if(scroll)showExecution();performStep();
+  }
+  function next(scroll=true){seek(state.tick);if(scroll)showExecution();performStep();}
+  $('play').onclick=()=>play(true);$('localPlay').onclick=()=>play(false);
+  $('step').onclick=()=>next(true);$('next').onclick=()=>next(false);
+  $('previous').onclick=()=>seek(state.tick-1);
+  $('timeline').oninput=()=>seek($('timeline').value);
+  const reset=()=>install(E.create(state.type,state.A,state.B),'Ejecución reiniciada: A y B se conservaron.');
+  $('localReset').onclick=reset;
+  $('localSpeed').onchange=()=>{$('vel').value=$('localSpeed').value;};
+  $('vel').onchange=()=>{$('localSpeed').value=$('vel').value;};
+  $('reset').onclick=reset;
   $('generate').onclick=generate;
   $('tipo').onchange=generate;
   $('n').oninput=generate;
@@ -145,5 +224,5 @@
     install(E.create(type,A,B),'Datos aplicados. La ejecución comienza desde cero.');
   };
   $('loadExample').onclick=()=>{const type=$('tipo').value,data=E.example(type,$('example').value);install(E.create(type,data.A,data.B),'Ejemplo cargado.');};
-  generate();
+  SimdComparison.init();generate();
 })();

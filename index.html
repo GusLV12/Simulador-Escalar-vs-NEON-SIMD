@@ -118,7 +118,7 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
 </style>
 <style>
 .data-panel{margin-bottom:16px}.data-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}.data-fields label{display:grid;gap:6px;font-weight:600}textarea{width:100%;min-height:90px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono)}textarea:focus-visible{outline:3px solid var(--vec)}.field-error{color:#bc3648;min-height:1.5em;font-weight:500;font-size:.85rem}[aria-invalid=true]{border:2px solid #bc3648}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.help{color:var(--muted);font-size:.88rem}.pass{color:var(--ok)}.fail{color:#bc3648}.test-list{max-height:320px;overflow:auto;padding-left:24px}.cell{min-width:44px;max-width:130px;overflow:hidden;padding-top:6px;font-size:.72rem}.reg{max-width:160px;overflow:auto;padding:4px;font-size:.8rem}.instr{overflow-wrap:anywhere}.stats{grid-template-columns:1fr 1fr 1.3fr}.stat .v{font-size:1.1rem}.result p{margin:6px 0}.tracewrap td{overflow-wrap:anywhere}.lane{font-size:.65rem}.ctl{max-width:100%}.note{line-height:1.6}@media(max-width:650px){.data-fields{grid-template-columns:1fr}.wrap{padding:16px 10px}.stats{gap:4px}.stat{padding:6px}.stat .v{font-size:.95rem}}
-</style></head>
+</style><link rel="stylesheet" href="interactive.css"></head>
 <body>
 <div class="wrap">
   <header>
@@ -161,12 +161,21 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
 </div>
 <div class="actions"><button id="apply" class="primary">Aplicar datos</button><label for="example">Ejemplo para el tipo seleccionado:</label><select id="example"><option value="full">Grupo completo</option><option value="tail">Grupo con residuo</option><option value="limits">Valores límite</option></select><button id="loadExample">Cargar ejemplo</button></div>
 <p id="inputStatus" class="help" role="status"></p>
-</section><section class="models">
+</section>
+<section class="execution" id="execution" aria-label="Ejecución interactiva">
+<div class="execution-controls" aria-label="Navegación de la ejecución">
+  <button id="previous">Anterior</button><button id="localPlay" class="primary">Reproducir</button><button id="next">Siguiente</button><button id="localReset">Reiniciar</button>
+  <label>Velocidad <select id="localSpeed"><option value="1400">Lenta</option><option value="800" selected>Normal</option><option value="300">Rápida</option></select></label>
+  <label class="timeline-control" for="timeline"><span id="position">Paso 0 de 16</span><input id="timeline" type="range" min="0" max="16" value="0" step="1"></label>
+  <div id="phaseStatus" class="phase-status" role="status">Listo para comenzar.</div>
+</div>
+<section class="models">
     <article class="model esc" aria-label="Modelo escalar">
       <div class="mhead"><h2><span>Escalar</span> · ALU / VFP</h2><span class="flynn">SISD</span></div>
       <div class="arr"><span class="lbl">A</span><div class="cells" id="eA"></div></div>
       <div class="arr"><span class="lbl">B</span><div class="cells" id="eB"></div></div>
       <div class="unit">
+        <div id="ePhase" class="phase-label">Listo</div>
         <div class="uname">Unidad de ejecución: 1 dato por instrucción</div>
         <div class="alu">
           <div class="reg" id="eRa">–</div><span class="op">+</span><div class="reg" id="eRb">–</div>
@@ -188,6 +197,7 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
       <div class="arr"><span class="lbl">A</span><div class="cells" id="vA"></div></div>
       <div class="arr"><span class="lbl">B</span><div class="cells" id="vB"></div></div>
       <div class="unit">
+        <div id="vPhase" class="phase-label">Listo</div>
         <div class="uname" id="vUname">Unidad vectorial</div>
         <div class="qrow"><span class="lbl">q0</span><div class="q" id="q0"></div></div>
         <div class="qrow"><span class="lbl">q1</span><div class="q" id="q1"></div></div>
@@ -226,8 +236,20 @@ td.e{color:var(--esc)} td.v{color:var(--vec)} td.t{color:var(--tail)} td.n{color
       <p><b>Por qué acelera imágenes, audio y álgebra vectorial:</b> esas cargas repiten la misma operación sobre muchos datos contiguos y sin dependencias entre sí, que es justo lo que llena los lanes. El residuo, los accesos a memoria y las dependencias impiden alcanzar siempre el rendimiento ideal.</p>
     </div>
   </section>
+ </section>
+ <section class="card comparison" aria-labelledby="comparisonTitle">
+   <h2 id="comparisonTitle">¿Cómo cambia la ventaja al aumentar N?</h2>
+   <p class="chart-help"><b>Eje X (horizontal):</b> N, cantidad de elementos de cada arreglo. <b>Eje Y (vertical):</b> instrucciones de suma necesarias para calcular los N resultados.</p>
+   <p class="chart-help">Instrucciones de suma, no ciclos ni aceleración real. Las caídas de las curvas NEON aparecen cuando el residuo completa un grupo SIMD.</p>
+   <div class="chart-key"><span style="--key:var(--esc)">Escalar</span><span style="--key:var(--vec)">NEON float32 · 4 carriles</span><span style="--key:var(--tail)">NEON int16 · 8 carriles</span><span style="--key:var(--ok)">NEON uint8 · 16 carriles</span></div>
+   <div id="chartHost"></div>
+   <div class="chart-controls"><label for="graphN">Consultar N:</label><input id="graphN" type="range" min="1" max="40" step="1" value="16"><output id="graphValue" for="graphN">16</output><button id="graphCurrent">Ver N del experimento</button></div>
+   <p id="chartSummary" role="status"></p><p id="chartCurrent" class="chart-help"></p>
+   <p class="chart-help">Consulta con el ratón, toca la gráfica o usa las flechas sobre la gráfica o el deslizador. Consultar no cambia el experimento.</p>
+   <details><summary>Tabla de instrucciones para todos los tamaños</summary><div class="table-scroll"><table><caption>Conteos de sumas para N de 1 a 40</caption><thead><tr><th scope="col">N</th><th scope="col">Escalar</th><th scope="col">float32</th><th scope="col">int16</th><th scope="col">uint8</th></tr></thead><tbody id="chartTable"></tbody></table></div></details>
+ </section>
 
 <p class="note">Modelo didáctico basado en el datasheet del Allwinner A20 (Rev. 1.0, 2013): 2× Cortex-A7, ARMv7, NEON Advanced SIMD, VFPv4, 32 KB L1I + 32 KB L1D por núcleo. Solo se cuentan instrucciones de suma. Se omiten cargas, almacenamientos, control del bucle, pipeline y latencias; no se cuentan ciclos reales. JavaScript representa las operaciones: no ejecuta instrucciones ARM/NEON. La relación mostrada no mide aceleración real. En enteros, el resultado se reduce a 8 o 16 bits; el ADD escalar ilustrado no representa las instrucciones adicionales de conversión o almacenamiento. En float32 se redondean entradas y resultados; no se modelan todos los modos especiales de punto flotante del hardware.</p>
 </div>
 
-<script src="engine.js"></script><script src="app.js"></script></body></html>
+<script src="engine.js"></script><script src="comparison.js"></script><script src="app.js"></script></body></html>

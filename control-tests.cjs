@@ -25,24 +25,25 @@ class Element {
   removeAttribute(key){delete this.attributes[key];}
   scrollIntoView(options){this.scrollCalls=(this.scrollCalls||0)+1;this.scrollOptions=options;}
 }
-function harness() {
+function harness(reduced=true) {
   const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8'), elements=new Map();
   for(const match of html.matchAll(/\bid="([^"]+)"/g)) {
     assert(!elements.has(match[1]),`ID duplicado: ${match[1]}`);elements.set(match[1],new Element());
   }
   const $=id=>{assert(elements.has(id),`No existe #${id} en HTML`);return elements.get(id);};
   $('tipo').value='float32';$('n').value='16';$('vel').value='800';$('example').value='full';
+  for(const id of ['comparisonSvg','inspectMarker','currentMarker','inspectionPoint',...['float32','int16','uint8'].map(t=>'curve-'+t)])elements.set(id,new Element());
   const selectors=new Map([['.aluchip',new Element()],['.tracewrap',new Element()]]);
-  const tasks=new Map();let next=0;
-  const context=vm.createContext({console,
+  const tasks=new Map(),delays=[];let next=0;
+  const context=vm.createContext({console,matchMedia:()=>({matches:reduced}),
     document:{getElementById:$,createElement:()=>new Element(),createTextNode:text=>{const e=new Element();e.textContent=text;return e;},querySelector:s=>{assert(selectors.has(s));return selectors.get(s);}},
-    setTimeout:fn=>{const id=++next;tasks.set(id,fn);return id;},clearTimeout:id=>tasks.delete(id)
+    setTimeout:(fn,delay)=>{const id=++next;tasks.set(id,fn);delays.push(delay);return id;},clearTimeout:id=>tasks.delete(id)
   });
-  for(const file of ['engine.js','app.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),context,{filename:file});
+  for(const file of ['engine.js','comparison.js','app.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),context,{filename:file});
   const click=id=>{if(!$(id).disabled)$(id).onclick();};
   const apply=(A,B)=>{$('inputA').value=A;$('inputB').value=B;click('apply');};
   const snapshot=()=>JSON.stringify(['eA','eB','eC','vC','eI','vI','trace'].map(id=>$(id).textContent));
-  return {$,click,apply,snapshot,tasks,traceWrap:selectors.get('.tracewrap'),tick(){const entry=tasks.entries().next().value;if(entry){tasks.delete(entry[0]);entry[1]();}}};
+  return {$,click,apply,snapshot,tasks,delays,traceWrap:$('execution'),tick(){const entry=tasks.entries().next().value;if(entry){tasks.delete(entry[0]);entry[1]();}}};
 }
 const tests=[];
 function test(name,fn){try{fn(harness());tests.push({name,ok:true});}catch(e){tests.push({name,ok:false,error:e.message});}}
@@ -58,8 +59,23 @@ test('Generar datos detiene ejecución y limpia conteos',({$,click,tasks})=>{cli
 test('Cambiar longitud o tipo cancela reproducción',({$,click,tasks})=>{click('play');$('n').value='17';$('n').oninput();assert.equal(tasks.size,0);assert.equal($('eA').children.length,17);click('play');$('tipo').value='uint8';$('tipo').onchange();assert.equal(tasks.size,0);assert.equal($('q0').children.length,16);});
 test('Todos los ejemplos se cargan para cada tipo',({$,click})=>{for(const type of ['float32','int16','uint8']){ $('tipo').value=type;$('tipo').onchange();for(const example of ['full','tail','limits']){$('example').value=example;click('loadExample');assert.equal($('errorA').textContent,'');assert.equal($('errorB').textContent,'');assert.equal($('eI').textContent,'0');}}});
 test('N=17 termina con 17 sumas escalares y 5 en ruta NEON',({$,apply,click,tick,tasks})=>{apply(Array(17).fill(2).join(','),Array(17).fill(3).join(','));click('play');for(let i=0;i<20;i++)tick();assert.equal(tasks.size,0);assert.equal($('eI').textContent,'17');assert.equal($('vI').textContent,'5');assert.equal($('trace').children.length,17);assert.match($('result').textContent,/4 vectoriales \+ 1 escalares/);assert($('step').disabled);assert($('play').disabled);});
-test('Reproducir y Un paso llevan a la traza; pausar no desplaza',({click,traceWrap})=>{click('play');assert.equal(traceWrap.scrollCalls,1);click('play');assert.equal(traceWrap.scrollCalls,1);click('step');assert.equal(traceWrap.scrollCalls,2);assert.equal(traceWrap.scrollOptions.block,'center');});
+test('Reproducir y Un paso llevan a la zona de ejecución; pausar no desplaza',({click,traceWrap})=>{click('play');assert.equal(traceWrap.scrollCalls,1);click('play');assert.equal(traceWrap.scrollCalls,1);click('step');assert.equal(traceWrap.scrollCalls,2);assert.equal(traceWrap.scrollOptions.block,'start');});
 test('Float32 conserva el signo de cero al aplicar y reiniciar',({$,apply,click})=>{apply('-0','-0');assert.equal($('inputA').value,'-0');click('step');assert.equal($('eRc').textContent,'-0');assert.match($('trace').textContent,/\[-0\]/);click('reset');assert.equal($('inputA').value,'-0');});
+test('Anterior restaura resultados, conteos y traza',({$,click,snapshot})=>{click('step');const before=snapshot();click('next');click('previous');assert.equal(snapshot(),before);assert.equal($('position').textContent,'Paso 1 de 16');click('previous');assert.equal($('eI').textContent,'0');assert($('previous').disabled);});
+test('Saltar al final y retroceder habilita continuar',({$,click,tick,tasks})=>{$('timeline').value='16';$('timeline').oninput();assert($('next').disabled);assert($('play').disabled);assert.equal($('trace').children.length,16);click('previous');assert(!$('play').disabled);click('localPlay');tick();assert.equal($('eI').textContent,'16');assert.equal(tasks.size,0);assert($('localPlay').disabled);});
+test('Controles y velocidad superior/local se sincronizan',({$,click})=>{$('localSpeed').value='300';$('localSpeed').onchange();assert.equal($('vel').value,'300');$('vel').value='1400';$('vel').onchange();assert.equal($('localSpeed').value,'1400');click('localPlay');assert.equal($('play').textContent,'Pausar');click('play');assert.equal($('localPlay').textContent,'Reproducir');click('localReset');assert.equal($('position').textContent,'Paso 0 de 16');});
+test('Consulta de gráfica conserva el experimento',({$,click,snapshot})=>{click('step');const before=snapshot();$('graphN').value='17';$('graphN').oninput();assert.equal(snapshot(),before);assert.match($('chartSummary').textContent,/NEON float32: 5/);assert.equal($('chartTable').children.length,40);click('graphCurrent');assert.equal(Number($('graphN').value),16);});
+test('Retroceder conserva -0 e Infinity sin serializar',({$,apply,click})=>{apply('-0, 3.4028234663852886e38','-0, 3.4028234663852886e38');click('step');click('step');assert.equal($('eRc').textContent,'Infinity');click('previous');assert.equal($('eRc').textContent,'-0');click('next');assert.equal($('eRc').textContent,'Infinity');});
+test('Animación tiene tres fases y confirma el paso en salida',()=>{const {$,click,tick,tasks}=harness(false);click('step');assert.equal($('eI').textContent,'0');assert.match($('execution').className,/phase-entry/);tick();assert.match($('execution').className,/phase-sum/);assert.equal($('eI').textContent,'0');tick();assert.match($('execution').className,/phase-output/);assert.equal($('eI').textContent,'1');tick();assert.equal(tasks.size,0);assert.equal($('execution').className,'execution');});
+for(const phase of [0,1,2])test(`Cancelar fase ${phase+1} evita callbacks antiguos`,()=>{const {$,click,tick,tasks}=harness(false);click('play');for(let i=0;i<phase;i++)tick();const stale=[...tasks.values()][0];click('localReset');stale();assert.equal($('eI').textContent,'0');assert.equal(tasks.size,0);assert.equal($('execution').className,'execution');});
+test('Clics rápidos no duplican pasos ni temporizadores',()=>{const {$,click,tick,tasks}=harness(false);click('step');click('step');click('step');assert.equal(tasks.size,1);for(let i=0;i<3;i++)tick();assert.equal($('eI').textContent,'1');assert.equal(tasks.size,0);});
+test('Residuo no ocupa carriles Q y ruta terminada espera',({$,apply,click})=>{apply('1 2 3 4 5','1 1 1 1 1');click('step');click('step');assert.match($('vUname').textContent,/Residuo escalar/);assert([...$('q0').children].every(e=>e.textContent==='–'));click('step');assert.match($('vIns').textContent,/En espera/);assert.equal($('vI').textContent,'2');});
+test('Movimiento reducido mantiene el intervalo de reproducción',({$,click,tick,delays})=>{$('vel').value='1400';click('play');assert.equal($('eI').textContent,'1');assert.equal(delays[0],1400);tick();assert.equal($('eI').textContent,'2');});
+test('Cambiar datos durante la suma cancela callbacks y secuencia',()=>{const {$,click,tick,apply,tasks}=harness(false);click('play');tick();const stale=[...tasks.values()][0];apply('7 8','1 2');stale();assert.equal($('eI').textContent,'0');assert.equal($('position').textContent,'Paso 0 de 2');assert.equal(tasks.size,0);click('step');for(let i=0;i<3;i++)tick();assert.equal($('eRc').textContent,'8');});
+test('Saltar durante una animación cancela el paso pendiente',()=>{const {$,click,tick,tasks}=harness(false);click('play');tick();const stale=[...tasks.values()][0];$('timeline').value='8';$('timeline').oninput();stale();assert.equal($('eI').textContent,'8');assert.equal($('trace').children.length,8);assert.equal(tasks.size,0);});
+test('Gráfica responde a teclado y limita la consulta',({$,snapshot})=>{const before=snapshot();const event=key=>({key,preventDefault(){}});$('comparisonSvg').onkeydown(event('End'));assert.equal(Number($('graphN').value),40);$('comparisonSvg').onkeydown(event('ArrowRight'));assert.equal(Number($('graphN').value),40);$('comparisonSvg').onkeydown(event('Home'));assert.equal(Number($('graphN').value),1);$('comparisonSvg').onkeydown(event('ArrowLeft'));assert.equal(Number($('graphN').value),1);assert.equal(snapshot(),before);});
+test('Controles locales no desplazan la página',({click,traceWrap})=>{click('next');click('localPlay');click('localPlay');assert.equal(traceWrap.scrollCalls||0,0);});
+test('Ambos reinicios restauran los mismos datos aplicados',({$,click})=>{const A=$('inputA').value;click('step');$('inputA').value='abc';click('localReset');assert.equal($('inputA').value,A);assert.equal($('eI').textContent,'0');assert($('previous').disabled);});
 for(const t of tests)console.log(`${t.ok?'OK':'FALLO'} ${t.name}${t.error?': '+t.error:''}`);
 console.log(`${tests.filter(t=>t.ok).length}/${tests.length} pruebas de controles aprobadas (DOM mínimo, sin navegador)`);
 process.exitCode=tests.some(t=>!t.ok)?1:0;

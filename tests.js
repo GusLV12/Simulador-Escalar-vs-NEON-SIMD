@@ -19,6 +19,22 @@
         assert(s.tailCount === A.length%lanes, 'Conteo de residuo incorrecto');
       });
     }
+    test('Conteos de las cuatro curvas para todos los tamaños',()=>{
+      for(const [type,L] of [['float32',4],['int16',8],['uint8',16]])for(let N=1;N<=40;N++){
+        const c=E.counts(type,N);
+        assert(c.scalar===N && c.vector===Math.floor(N/L) && c.tail===N%L && c.total===Math.floor(N/L)+N%L,'Conteos incorrectos');
+        assert(c.ratio===N/c.total,'Relación incorrecta');
+      }
+    });
+    test('Secuencia preserva estados independientes, -0 e Infinity',()=>{
+      const seq=E.timeline('float32',[-0,3.4028234663852886e38],[-0,3.4028234663852886e38]);
+      assert(seq.states.length===3 && seq.events.length===3,'Longitud incorrecta');
+      assert(seq.states[0].Cs.every(v=>v===null),'Estado inicial modificado');
+      assert(Object.is(seq.states[1].Cs[0],-0),'Se perdió -0');
+      assert(seq.states[2].Cs[1]===Infinity,'Se perdió infinito');
+      const copy=E.copy(seq.states[1]);copy.Cs[0]=99;copy.A[0]=99;
+      assert(Object.is(seq.states[1].Cs[0],-0)&&Object.is(seq.states[1].A[0],-0),'Copias comparten arreglos');
+    });
     for (const type of ['float32','int16','uint8']) {
       test(`${type}: todos los tamaños de 1 a 40`, () => {
         const lanes = {float32:4,int16:8,uint8:16}[type];
